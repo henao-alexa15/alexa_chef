@@ -7,6 +7,10 @@ from dotenv import load_dotenv
 # Cargar variables de entorno
 load_dotenv()
 
+# Debug: verificar variables de entorno
+print("GOOGLE_API_KEY:", os.getenv("GOOGLE_API_KEY"))
+print("TAVILY_API_KEY:", os.getenv("TAVILY_API_KEY"))
+
 # Configurar APIs
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 tavily = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
