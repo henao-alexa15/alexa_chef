@@ -7,12 +7,46 @@ import pyttsx3
 import time
 import threading
 import subprocess
+import streamlit.components.v1 as components
 
 # Variables globales para controlar el TTS
 tts_engine = None
 is_speaking = False
 is_paused = False
 current_text = ""
+
+def is_running_locally():
+    """
+    Detecta si la aplicación está corriendo localmente o en un servidor web.
+    """
+    # Verificar variables de entorno comunes en servicios de despliegue
+    deployment_env_vars = [
+        'STREAMLIT_SERVER_HEADLESS',  # Streamlit Cloud
+        'HEROKU_APP_ID',             # Heroku
+        'RENDER_SERVICE_ID',         # Render
+        'VERCEL',                    # Vercel
+        'NETLIFY',                   # Netlify
+        'GITHUB_ACTIONS',            # GitHub Actions
+    ]
+
+    for var in deployment_env_vars:
+        if os.getenv(var):
+            return False
+
+    # Verificar si estamos en un entorno de servidor Linux (común en despliegues)
+    if os.name != 'nt':  # No es Windows
+        return False
+
+    return True
+
+def get_tts_method():
+    """
+    Determina qué método de TTS usar basado en el entorno.
+    """
+    if is_running_locally():
+        return "local"  # pyttsx3
+    else:
+        return "web"    # Web Speech API
 
 # Cargar variables de entorno
 load_dotenv()
@@ -152,21 +186,27 @@ def init_tts_engine():
 
 def speak_text(text):
     """
-    Función simple para reproducir texto completo.
+    Función híbrida para reproducir texto completo.
+    Usa pyttsx3 localmente o Web Speech API en web.
     """
     global is_speaking, current_text
 
     try:
-        init_tts_engine()
         current_text = text
         is_speaking = True
         print("Iniciando reproducción de voz...")
 
-        if tts_engine:
-            tts_engine.say(text)
-            tts_engine.runAndWait()
+        if get_tts_method() == "local":
+            # Usar pyttsx3 para desarrollo local
+            init_tts_engine()
+            if tts_engine:
+                tts_engine.say(text)
+                tts_engine.runAndWait()
+            else:
+                speak_text_fallback(text)
         else:
-            speak_text_fallback(text)
+            # Para despliegue web, mostrar mensaje indicando que use Web Speech API
+            print("Modo web detectado - usando Web Speech API del navegador")
 
         is_speaking = False
         print("Reproducción completada")
@@ -183,7 +223,7 @@ def pause_speaking():
     if is_speaking:
         is_speaking = False
         is_paused = True
-        if tts_engine:
+        if get_tts_method() == "local" and tts_engine:
             tts_engine.stop()
         print("Lectura pausada")
 
@@ -198,14 +238,130 @@ def resume_speaking():
 
 def start_speaking(text):
     """
-    Inicia la reproducción en un hilo separado.
+    Inicia la reproducción en un hilo separado (solo para local).
     """
-    def speak_thread():
+    if get_tts_method() == "local":
+        def speak_thread():
+            speak_text(text)
+
+        thread = threading.Thread(target=speak_thread)
+        thread.daemon = True
+        thread.start()
+    else:
+        # Para web, la reproducción se maneja con JavaScript
         speak_text(text)
 
-    thread = threading.Thread(target=speak_thread)
-    thread.daemon = True
-    thread.start()
+def create_web_speech_component(recipe_text):
+    """
+    Crea un componente de Streamlit con Web Speech API para reproducción en web.
+    """
+    # Escapar comillas y caracteres especiales
+    safe_text = recipe_text.replace("'", "\\'").replace('"', '\\"').replace('\n', ' ').replace('\r', ' ')
+
+    js_code = f"""
+    <div id="speech-controls" style="margin: 10px 0;">
+        <button id="speak-btn" style="background: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-right: 10px;">
+            ▶️ Reproducir Receta
+        </button>
+        <button id="pause-btn" style="background: #FF9800; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-right: 10px;">
+            ⏸️ Pausar
+        </button>
+        <button id="stop-btn" style="background: #f44336; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">
+            ⏹️ Detener
+        </button>
+        <div id="status" style="margin-top: 10px; font-weight: bold;"></div>
+    </div>
+
+    <script>
+        let speechSynthesis = window.speechSynthesis;
+        let currentUtterance = null;
+        let isSpeaking = false;
+        let isPaused = false;
+
+        function updateStatus(message) {{
+            document.getElementById('status').textContent = message;
+        }}
+
+        function updateButtons() {{
+            const speakBtn = document.getElementById('speak-btn');
+            const pauseBtn = document.getElementById('pause-btn');
+            const stopBtn = document.getElementById('stop-btn');
+
+            speakBtn.disabled = isSpeaking && !isPaused;
+            pauseBtn.disabled = !isSpeaking;
+            stopBtn.disabled = !isSpeaking && !isPaused;
+        }}
+
+        document.getElementById('speak-btn').onclick = function() {{
+            if (isPaused && currentUtterance) {{
+                // Reanudar
+                speechSynthesis.resume();
+                isPaused = false;
+                updateStatus('▶️ Reproduciendo...');
+            }} else {{
+                // Iniciar nueva reproducción
+                if (currentUtterance) {{
+                    speechSynthesis.cancel();
+                }}
+
+                currentUtterance = new SpeechSynthesisUtterance('{safe_text}');
+                currentUtterance.lang = 'es-ES'; // Español
+                currentUtterance.rate = 0.8; // Un poco más lento
+                currentUtterance.pitch = 1.0;
+
+                currentUtterance.onstart = function() {{
+                    isSpeaking = true;
+                    isPaused = false;
+                    updateStatus('🔊 Reproduciendo receta...');
+                    updateButtons();
+                }};
+
+                currentUtterance.onend = function() {{
+                    isSpeaking = false;
+                    isPaused = false;
+                    updateStatus('✅ Reproducción completada');
+                    updateButtons();
+                }};
+
+                currentUtterance.onerror = function(event) {{
+                    console.error('Error en Web Speech API:', event.error);
+                    isSpeaking = false;
+                    isPaused = false;
+                    updateStatus('❌ Error en reproducción');
+                    updateButtons();
+                }};
+
+                speechSynthesis.speak(currentUtterance);
+            }}
+        }};
+
+        document.getElementById('pause-btn').onclick = function() {{
+            if (isSpeaking && !isPaused) {{
+                speechSynthesis.pause();
+                isPaused = true;
+                updateStatus('⏸️ Pausado');
+                updateButtons();
+            }}
+        }};
+
+        document.getElementById('stop-btn').onclick = function() {{
+            if (currentUtterance) {{
+                speechSynthesis.cancel();
+                currentUtterance = null;
+                isSpeaking = false;
+                isPaused = false;
+                updateStatus('⏹️ Detenido');
+                updateButtons();
+            }}
+        }};
+
+        // Inicializar botones
+        updateButtons();
+        updateStatus('Listo para reproducir');
+    </script>
+    """
+
+    return js_code
 
 def speak_text_fallback(text):
     """

@@ -62,48 +62,75 @@ def display_recipe(recipe_data):
 
     st.divider()
 
-    # Botones para controlar la lectura
-    col1, col2, col3 = st.columns([1, 1, 1])
+    # Mostrar información del entorno
+    tts_method = utils.get_tts_method()
+    if tts_method == "local":
+        st.info("🎵 **Modo Local**: Usando voz del sistema (pyttsx3)")
+    else:
+        st.info("🌐 **Modo Web**: Usando voz del navegador (Web Speech API)")
 
-    with col1:
-        if st.button("▶️ Reproducir", key="play_recipe", help="Reproducir la receta completa"):
-            if not st.session_state.is_reading:
-                st.session_state.is_reading = True
-                st.session_state.is_paused = False
-                with st.spinner("Preparando la lectura..."):
-                    recipe_text = utils.get_recipe_text_for_speech(recipe_data)
-                    def speak_thread():
-                        try:
-                            utils.speak_text(recipe_text)
-                        finally:
-                            st.session_state.is_reading = False
-                            st.session_state.is_paused = False
+    # Detectar el entorno y mostrar controles apropiados
+    if tts_method == "local":
+        # Controles para desarrollo local (usando pyttsx3)
+        col1, col2, col3 = st.columns([1, 1, 1])
 
-                    thread = threading.Thread(target=speak_thread)
-                    thread.daemon = True
-                    thread.start()
-                    st.success("🎵 Reproduciendo la receta...")
+        with col1:
+            if st.button("▶️ Reproducir", key="play_recipe", help="Reproducir la receta completa"):
+                if not st.session_state.is_reading:
+                    st.session_state.is_reading = True
+                    st.session_state.is_paused = False
+                    with st.spinner("Preparando la lectura..."):
+                        recipe_text = utils.get_recipe_text_for_speech(recipe_data)
+                        def speak_thread():
+                            try:
+                                utils.speak_text(recipe_text)
+                            finally:
+                                st.session_state.is_reading = False
+                                st.session_state.is_paused = False
 
-    with col2:
-        if st.button("⏸️ Pausar", key="pause_reading", help="Pausar la reproducción"):
-            if st.session_state.is_reading:
-                utils.pause_speaking()
+                        thread = threading.Thread(target=speak_thread)
+                        thread.daemon = True
+                        thread.start()
+                        st.success("🎵 Reproduciendo la receta...")
+
+        with col2:
+            if st.button("⏸️ Pausar", key="pause_reading", help="Pausar la reproducción"):
+                if st.session_state.is_reading:
+                    utils.pause_speaking()
+                    st.session_state.is_reading = False
+                    st.session_state.is_paused = True
+                    st.warning("⏸️ Lectura pausada")
+
+        with col3:
+            if st.button("⏹️ Detener", key="stop_reading", help="Detener completamente la reproducción"):
+                utils.stop_speaking()
                 st.session_state.is_reading = False
-                st.session_state.is_paused = True
-                st.warning("⏸️ Lectura pausada")
+                st.session_state.is_paused = False
+                st.info("⏹️ Lectura detenida")
 
-    with col3:
-        if st.button("⏹️ Detener", key="stop_reading", help="Detener completamente la reproducción"):
-            utils.stop_speaking()
-            st.session_state.is_reading = False
-            st.session_state.is_paused = False
-            st.info("⏹️ Lectura detenida")
+        # Mostrar estado de la lectura
+        if st.session_state.is_reading:
+            st.info("🔊 Reproduciendo receta...")
+        elif hasattr(st.session_state, 'is_paused') and st.session_state.get('is_paused', False):
+            st.warning("⏸️ Lectura pausada - presiona Reproducir para continuar")
 
-    # Mostrar estado de la lectura
-    if st.session_state.is_reading:
-        st.info("🔊 Reproduciendo receta...")
-    elif hasattr(st.session_state, 'is_paused') and st.session_state.get('is_paused', False):
-        st.warning("⏸️ Lectura pausada - presiona Reproducir para continuar")
+    else:
+        # Controles para despliegue web (usando Web Speech API)
+        st.markdown("### 🎵 Controles de Voz")
+        st.info("💡 **Modo Web**: Los controles de voz usan el navegador. Asegúrate de permitir el acceso al micrófono si es necesario.")
+
+        # Preparar el texto de la receta
+        recipe_text = utils.get_recipe_text_for_speech(recipe_data)
+
+        # Mostrar el componente de Web Speech API
+        components.html(utils.create_web_speech_component(recipe_text), height=150)
+
+        st.markdown("""
+        **Instrucciones:**
+        - ▶️ **Reproducir**: Inicia la lectura completa de la receta
+        - ⏸️ **Pausar**: Detiene temporalmente la reproducción
+        - ⏹️ **Detener**: Cancela completamente la reproducción
+        """)
 
 def main():
     # Inicializar session_state para mantener la receta
