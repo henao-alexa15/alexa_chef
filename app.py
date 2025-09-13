@@ -2,6 +2,8 @@ import streamlit as st
 from PIL import Image
 import utils
 import threading
+import os
+import streamlit.components.v1 as components
 
 st.set_page_config(layout="centered")
 
@@ -70,9 +72,14 @@ def display_recipe(recipe_data):
         else:
             st.info("🌐 **Modo Web**: Usando voz del navegador (Web Speech API)")
     except AttributeError as e:
-        st.error(f"Error al detectar el método TTS: {e}")
-        st.info("🔄 **Modo de Respaldo**: Usando voz del sistema local")
-        tts_method = "local"
+        st.warning(f"Detectando entorno automáticamente...")
+        # Si hay error, verificar si estamos en un entorno web
+        if os.name != 'nt' or any(os.getenv(var) for var in ['STREAMLIT_SERVER_HEADLESS', 'HEROKU_APP_ID', 'RENDER_SERVICE_ID']):
+            st.info("🌐 **Modo Web Detectado**: Usando voz del navegador (Web Speech API)")
+            tts_method = "web"
+        else:
+            st.info("🎵 **Modo Local**: Usando voz del sistema (pyttsx3)")
+            tts_method = "local"
 
     # Detectar el entorno y mostrar controles apropiados
     if tts_method == "local":

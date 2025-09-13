@@ -27,6 +27,8 @@ def is_running_locally():
         'VERCEL',                    # Vercel
         'NETLIFY',                   # Netlify
         'GITHUB_ACTIONS',            # GitHub Actions
+        'STREAMLIT_SERVER_PORT',     # Streamlit server
+        'STREAMLIT_SERVER_ADDRESS',  # Streamlit server
     ]
 
     for var in deployment_env_vars:
@@ -35,6 +37,10 @@ def is_running_locally():
 
     # Verificar si estamos en un entorno de servidor Linux (común en despliegues)
     if os.name != 'nt':  # No es Windows
+        return False
+
+    # Verificar si estamos en un entorno de contenedor o servidor
+    if os.getenv('CONTAINER') or os.getenv('DOCKER_CONTAINER'):
         return False
 
     return True
