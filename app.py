@@ -63,11 +63,16 @@ def display_recipe(recipe_data):
     st.divider()
 
     # Mostrar información del entorno
-    tts_method = utils.get_tts_method()
-    if tts_method == "local":
-        st.info("🎵 **Modo Local**: Usando voz del sistema (pyttsx3)")
-    else:
-        st.info("🌐 **Modo Web**: Usando voz del navegador (Web Speech API)")
+    try:
+        tts_method = utils.get_tts_method()
+        if tts_method == "local":
+            st.info("🎵 **Modo Local**: Usando voz del sistema (pyttsx3)")
+        else:
+            st.info("🌐 **Modo Web**: Usando voz del navegador (Web Speech API)")
+    except AttributeError as e:
+        st.error(f"Error al detectar el método TTS: {e}")
+        st.info("🔄 **Modo de Respaldo**: Usando voz del sistema local")
+        tts_method = "local"
 
     # Detectar el entorno y mostrar controles apropiados
     if tts_method == "local":
